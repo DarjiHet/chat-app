@@ -6,6 +6,7 @@ const connectDb = require('./conifg/dbConnect');
 const bodyParser = require('body-parser');
 const authRoute = require('./routes/authRoute');
 const chatRoute = require('./routes/chatRoute');
+const statusRoute = require('./routes/statusRoute');
 const http = require('http');
 const initializeSocket = require('./services/socketService');
 
@@ -40,7 +41,7 @@ const io = initializeSocket(server)
 // apply socket middleware before routes
 app.use((req, res, next) => {
     req.io = io;
-    req.socketUseMap = io.socketUseMap
+    req.socketUserMap = io.socketUserMap
     next();
 })
 
@@ -48,7 +49,7 @@ app.use((req, res, next) => {
 //routes
 app.use('/api/auth', authRoute)
 app.use('/api/chat', chatRoute)
-// app.use('/api/status', )
+app.use('/api/status', statusRoute)
 
 
 server.listen(PORT, () => {

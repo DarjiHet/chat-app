@@ -1,5 +1,5 @@
 const express = require('express');
-const chatController = require('../controllers/chatController');
+const statusController = require('../controllers/statusController');
 const authMiddleware = require('../middleware/authMiddlerware');
 const { multerMiddleware } = require('../conifg/cloudinaryConfig');
 
@@ -7,14 +7,13 @@ const router = express.Router();
 
 //protected route
 
-router.post('/send-message', authMiddleware, multerMiddleware, chatController.sendMessage)
-router.get('/conversations', authMiddleware, chatController.getConversation)
-router.get('/conversations/:conversationId/messages', authMiddleware, chatController.getMessages)
+router.post('/', authMiddleware, multerMiddleware, statusController.createStatus)
+router.get('/', authMiddleware, statusController.getStatus)
 
 
-router.put('/messages/read', authMiddleware, chatController.markAsRead)
+router.put('/:statusId/view', authMiddleware, statusController.viewStatus)
 
 
-router.delete('/messages/:messageId', authMiddleware, chatController.deleteMessage)
+router.delete('/:statusId', authMiddleware, statusController.deleteStatus)
 
 module.exports = router;
