@@ -8,8 +8,14 @@ import { useNavigate } from "react-router-dom";
 import useUserStore from "../../store/useUserStore";
 import useThemeStore from "../../store/themeStore";
 import { motion } from "framer-motion";
-import { FaChevronDown, FaUser, FaWhatsapp } from "react-icons/fa";
+import { FaArrowLeft, FaChevronDown, FaUser, FaWhatsapp } from "react-icons/fa";
 import Spinner from "../../utils/Spinner";
+import {
+  sendOtp,
+  updateUserProfile,
+  verifyOtp,
+} from "../../services/user.service";
+import { toast } from "react-toastify";
 
 //validation schema
 const loginValidationSchema = yup
@@ -73,7 +79,7 @@ const Login = () => {
   const [profilePictureFile, setProfilePictureFile] = useState(null);
   const [showDropDown, setShowDropDown] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [error, serError] = useState("");
+  const [error, setError] = useState("");
   const navigate = useNavigate();
   const { setUser } = useUserStore();
   const { theme, setTheme } = useThemeStore();
@@ -94,12 +100,110 @@ const Login = () => {
       country.dialCode.includes(searchTerm)
   );
 
+  const onLoginSubmit = async () => {
+    try {
+      setLoading(true);
+      if (email) {
+        const response = await sendOtp(email);
+        if (response.status === "success") {
+          toast.info("OTP is send to your email");
+          setUserPhoneData({ email });
+          setStep(2);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      setError(error.message || "failed to send otp");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onOtpSubmit = async () => {
+    try {
+      setLoading(true);
+      if (!userPhoneData) {
+        throw new Error("Email data is missing");
+      }
+      const otpString = otp.join("");
+      let response;
+      if (userPhoneData?.email) {
+        response = await verifyOtp(otpString, userPhoneData.email);
+      }
+
+      if (response.status === "success") {
+        toast.success("OTP verify successfully");
+        const user = response.data?.user;
+        if (user?.username && user?.profilePicture) {
+          setUser(user);
+          toast.success("welcome back to our chat app");
+          navigate("/");
+          resetLoginSate();
+        } else {
+          setStep(3);
+        }
+      }
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setProfilePictureFile(file);
+      setProfilePicture(URL.createObjectURL(file));
+    }
+  };
+
+  const onProfileSubmit = async (data) => {
+    try {
+      setLoading(true);
+      const formData = new FormData();
+      formData.append("username", data.username);
+      formData.append("agreed", data.agreed);
+      if (profilePicture) {
+        formData.append("media", profilePictureFile);
+      } else {
+        formData.append("profilePicture", selectedAvatar);
+      }
+
+      await updateUserProfile(formData);
+      toast.success("welcome back to our chat app");
+      navigate("/");
+      resetLoginSate();
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOtpChange = (index, value) => {
+    const newOtp = [...otp];
+    newOtp[index] = value;
+    setOtp(newOtp);
+    setOtpValue("otp", newOtp.join(""));
+    if (value && index < 5) {
+      document.getElementById(`otp-${index + 1}`).focus();
+    }
+  };
+
+  const handleBack = () => {
+    setStep(1);
+    setUserPhoneData(null);
+    setOtp(["", "", "", "", "", ""]);
+    setError("");
+  };
+
   const {
     handleSubmit: handleOtpSubmit,
     formState: { errors: otpErrors },
     setValue: setOtpValue,
   } = useForm({
-    resolver: yupResolver(loginValidationSchema),
+    resolver: yupResolver(otpValidationSchema),
   });
 
   const {
@@ -166,7 +270,10 @@ const Login = () => {
         {error && <p className="text-red-500 text-center mb-4">{error}</p>}
 
         {step === 1 && (
-          <form className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={handleLoginSubmit(onLoginSubmit)}
+          >
             <p
               className={`text-center ${
                 theme === "dark" ? "text-gray-300" : "text-gray-600"
@@ -304,7 +411,7 @@ const Login = () => {
                                         }`}
               />
 
-                {loginError.email && (
+              {loginError.email && (
                 <p className="text-red-500 text-sm">
                   {loginError.email.message}{" "}
                 </p>
@@ -312,12 +419,61 @@ const Login = () => {
             </div>
 
             <button
-            type="submit"
-            className="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition"
+              type="submit"
+              className="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition"
             >
-
-                {loading ? <Spinner/> : 'Send Otp'}
+              {loading ? <Spinner /> : "Send Otp"}
             </button>
+          </form>
+        )}
+        {step === 2 && (
+          <form onSubmit={handleOtpSubmit(onOtpSubmit)} className="space-y-4">
+            <p
+              className={`text-center ${
+                theme === "dark" ? "text-gray-300" : "text-gray-600"
+              } mb-4`}
+            >
+              Please enter the 6-digit Otp send to your {userPhoneData?.email}
+            </p>
+
+            <div className="flex justify-between">
+              {otp.map((digit, index) => (
+                <input
+                  key={index}
+                  id={`otp-${index}`}
+                  type="text"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(index, e.target.value)}
+                  className={`w-12 h-12 text-center border ${
+                    theme === "dark"
+                      ? "bg-gray-700 border-gray-600 text-white"
+                      : "bg-white border-gray-300"
+                  } rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 ${
+                    otpErrors.otp ? "border-red-500" : ""
+                  }`}
+                />
+              ))}
+            </div>
+
+            {otpErrors.otp && (
+                <p className="text-red-500 text-sm">{otpErrors.otp.message}</p>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-green-500 text-white py-2 rounded-md hover:bg-green-600 transition"
+              >
+                {loading ? <Spinner /> : "Verify Otp"}
+              </button>
+              <button
+               type="button"
+               onClick={handleBack}
+               className={`w-full mt-2 ${theme === 'dark' ? 'bg-gray-700 text-gray-300' : 'bg-gray-200 text-gray-700'} py-2 rounded-md hover:bg-gray-300 transition flex items-center justify-center`}
+              >
+                <FaArrowLeft className="mr-2" />
+                Wrong number? Go Back
+              </button>
           </form>
         )}
       </motion.div>
